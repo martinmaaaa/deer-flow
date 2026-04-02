@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -12,7 +13,11 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { useThreads } from "@/core/threads/hooks";
-import { pathOfThread, titleOfThread } from "@/core/threads/utils";
+import {
+  agentNameOfThread,
+  pathOfThread,
+  titleOfThread,
+} from "@/core/threads/utils";
 import { formatTimeAgo } from "@/core/utils/datetime";
 
 export default function ChatsPage() {
@@ -26,9 +31,14 @@ export default function ChatsPage() {
 
   const filteredThreads = useMemo(() => {
     return threads?.filter((thread) => {
-      return titleOfThread(thread).toLowerCase().includes(search.toLowerCase());
+      const title = titleOfThread(thread);
+      const agentName = agentNameOfThread(thread) ?? "";
+      return `${title} ${agentName}`
+        .toLowerCase()
+        .includes(search.toLowerCase());
     });
   }, [threads, search]);
+
   return (
     <WorkspaceContainer>
       <WorkspaceHeader></WorkspaceHeader>
@@ -47,23 +57,39 @@ export default function ChatsPage() {
           <main className="min-h-0 flex-1">
             <ScrollArea className="size-full py-4">
               <div className="mx-auto flex size-full max-w-(--container-width-md) flex-col">
-                {filteredThreads?.map((thread) => (
-                  <Link
-                    key={thread.thread_id}
-                    href={pathOfThread(thread.thread_id)}
-                  >
-                    <div className="flex flex-col gap-2 border-b p-4">
-                      <div>
-                        <div>{titleOfThread(thread)}</div>
-                      </div>
-                      {thread.updated_at && (
-                        <div className="text-muted-foreground text-sm">
-                          {formatTimeAgo(thread.updated_at)}
+                {filteredThreads?.length ? (
+                  filteredThreads.map((thread) => {
+                    const title = titleOfThread(thread);
+                    const agentName = agentNameOfThread(thread);
+
+                    return (
+                      <Link
+                        key={thread.thread_id}
+                        href={pathOfThread(thread)}
+                      >
+                        <div className="hover:bg-muted/40 flex flex-col gap-2 border-b p-4 transition-colors">
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium">{title}</div>
+                            {agentName && agentName !== title && (
+                              <Badge variant="secondary" className="text-xs">
+                                {agentName}
+                              </Badge>
+                            )}
+                          </div>
+                          {thread.updated_at && (
+                            <div className="text-muted-foreground text-sm">
+                              {formatTimeAgo(thread.updated_at)}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </Link>
-                ))}
+                      </Link>
+                    );
+                  })
+                ) : (
+                  <div className="text-muted-foreground flex h-full min-h-64 items-center justify-center px-4 text-center text-sm">
+                    还没有会话，先去智能体商店开始一段企业内容工作流。
+                  </div>
+                )}
               </div>
             </ScrollArea>
           </main>

@@ -1,6 +1,6 @@
 # DeerFlow - Unified Development Environment
 
-.PHONY: help config config-upgrade check install dev dev-daemon start stop up down clean docker-init docker-start docker-stop docker-logs docker-logs-frontend docker-logs-gateway
+.PHONY: help config config-upgrade check install dev dev-daemon start stop up down clean docker-init docker-start docker-start-full docker-stop docker-logs docker-logs-frontend docker-logs-gateway frontend-dev
 
 PYTHON ?= python
 BASH ?= bash
@@ -29,7 +29,9 @@ help:
 	@echo ""
 	@echo "Docker Development Commands:"
 	@echo "  make docker-init     - Pull the sandbox image"
-	@echo "  make docker-start    - Start Docker services (mode-aware from config.yaml, localhost:2026)"
+	@echo "  make docker-start    - Start backend Docker services only (recommended, localhost:3026)"
+	@echo "  make docker-start-full - Start full Docker stack including frontend container"
+	@echo "  make frontend-dev    - Run the frontend dev server on the host (fastest workflow)"
 	@echo "  make docker-stop     - Stop Docker development services"
 	@echo "  make docker-logs     - View Docker development logs"
 	@echo "  make docker-logs-frontend - View Docker frontend logs"
@@ -149,6 +151,14 @@ docker-init:
 # Start Docker development environment
 docker-start:
 	@./scripts/docker.sh start
+
+# Start full Docker development environment, including the frontend container
+docker-start-full:
+	@./scripts/docker.sh start --with-frontend
+
+# Start the frontend dev server on the host machine
+frontend-dev:
+	@./scripts/frontend-dev.sh
 
 # Stop Docker development environment
 docker-stop:

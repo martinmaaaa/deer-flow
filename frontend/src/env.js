@@ -11,8 +11,20 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string()
         : z.string().optional(),
+    BETTER_AUTH_BASE_URL: z.string().optional(),
+    DATABASE_URL:
+      process.env.NODE_ENV === "production"
+        ? z.string()
+        : z.string().optional(),
     BETTER_AUTH_GITHUB_CLIENT_ID: z.string().optional(),
     BETTER_AUTH_GITHUB_CLIENT_SECRET: z.string().optional(),
+    DEER_FLOW_INTERNAL_GATEWAY_BASE_URL: z.string().optional(),
+    DEER_FLOW_INTERNAL_LANGGRAPH_BASE_URL: z.string().optional(),
+    DEERFLOW_INTERNAL_GATEWAY_BASE_URL: z.string().optional(),
+    PLATFORM_ADMIN_EMAILS: z.string().optional(),
+    PLATFORM_BOOTSTRAP_ADMIN_EMAIL: z.string().optional(),
+    PLATFORM_BOOTSTRAP_ADMIN_NAME: z.string().optional(),
+    PLATFORM_BOOTSTRAP_ADMIN_PASSWORD: z.string().optional(),
     GITHUB_OAUTH_TOKEN: z.string().optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
@@ -36,9 +48,23 @@ export const env = createEnv({
    */
   runtimeEnv: {
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
+    BETTER_AUTH_BASE_URL: process.env.BETTER_AUTH_BASE_URL,
+    DATABASE_URL: process.env.DATABASE_URL,
     BETTER_AUTH_GITHUB_CLIENT_ID: process.env.BETTER_AUTH_GITHUB_CLIENT_ID,
     BETTER_AUTH_GITHUB_CLIENT_SECRET:
       process.env.BETTER_AUTH_GITHUB_CLIENT_SECRET,
+    DEER_FLOW_INTERNAL_GATEWAY_BASE_URL:
+      process.env.DEER_FLOW_INTERNAL_GATEWAY_BASE_URL,
+    DEER_FLOW_INTERNAL_LANGGRAPH_BASE_URL:
+      process.env.DEER_FLOW_INTERNAL_LANGGRAPH_BASE_URL,
+    DEERFLOW_INTERNAL_GATEWAY_BASE_URL:
+      process.env.DEERFLOW_INTERNAL_GATEWAY_BASE_URL,
+    PLATFORM_ADMIN_EMAILS: process.env.PLATFORM_ADMIN_EMAILS,
+    PLATFORM_BOOTSTRAP_ADMIN_EMAIL:
+      process.env.PLATFORM_BOOTSTRAP_ADMIN_EMAIL,
+    PLATFORM_BOOTSTRAP_ADMIN_NAME: process.env.PLATFORM_BOOTSTRAP_ADMIN_NAME,
+    PLATFORM_BOOTSTRAP_ADMIN_PASSWORD:
+      process.env.PLATFORM_BOOTSTRAP_ADMIN_PASSWORD,
     NODE_ENV: process.env.NODE_ENV,
 
     NEXT_PUBLIC_BACKEND_BASE_URL: process.env.NEXT_PUBLIC_BACKEND_BASE_URL,

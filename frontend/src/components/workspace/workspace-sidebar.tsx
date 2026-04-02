@@ -8,6 +8,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useWorkspaceSession } from "@/core/platform/hooks";
 
 import { RecentChatList } from "./recent-chat-list";
 import { WorkspaceHeader } from "./workspace-header";
@@ -18,6 +19,8 @@ export function WorkspaceSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const { open: isSidebarOpen } = useSidebar();
+  const { session } = useWorkspaceSession();
+
   return (
     <>
       <Sidebar variant="sidebar" collapsible="icon" {...props}>
@@ -26,7 +29,7 @@ export function WorkspaceSidebar({
         </SidebarHeader>
         <SidebarContent>
           <WorkspaceNavChatList />
-          {isSidebarOpen && <RecentChatList />}
+          {isSidebarOpen && session?.company && <RecentChatList />}
         </SidebarContent>
         <SidebarFooter>
           <WorkspaceNavMenu />

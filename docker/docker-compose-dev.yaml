@@ -2,16 +2,20 @@
 # Usage: docker-compose -f docker-compose-dev.yaml up --build
 #
 # Services:
-#   - nginx: Reverse proxy (port 2026)
-#   - frontend: Frontend Next.js dev server (port 3000)
+#   - nginx: Reverse proxy (container 2026, host 3026)
 #   - gateway: Backend Gateway API (port 8001)
 #   - langgraph: LangGraph server (port 2024)
+#   - postgres: Local Postgres for platform auth + tenant metadata
+#   - frontend (optional profile): Frontend Next.js dev server (port 3000)
 #   - provisioner (optional): Sandbox provisioner (creates Pods in host Kubernetes)
 #
 # Prerequisites:
 #   - Kubernetes cluster + kubeconfig are only required when using provisioner mode.
 #
-# Access: http://localhost:2026
+# Access: http://localhost:3026
+# Recommended local workflow:
+#   1. Start backend stack: make docker-start
+#   2. Start frontend on host: make frontend-dev
 
 services:
   # ── Sandbox Provisioner ────────────────────────────────────────────────
@@ -66,19 +70,43 @@ services:
     image: nginx:alpine
     container_name: deer-flow-nginx
     ports:
-      - "2026:2026"
+      - "3026:2026"
     volumes:
-      - ./nginx/${NGINX_CONF:-nginx.conf}:/etc/nginx/nginx.conf:ro
+      - ./nginx/${NGINX_CONF:-nginx.host-frontend.conf}:/etc/nginx/nginx.conf:ro
     depends_on:
-      - frontend
       - gateway
       - langgraph
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - deer-flow-dev
     restart: unless-stopped
 
+  # ── Local Postgres for Platform Control Plane ────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: deer-flow-postgres
+    ports:
+      - "55432:5432"
+    environment:
+      - POSTGRES_DB=deerflow
+      - POSTGRES_USER=deerflow
+      - POSTGRES_PASSWORD=deerflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - deer-flow-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deerflow -d deerflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   # Frontend - Next.js Development Server
   frontend:
+    profiles:
+      - frontend
     build:
       context: ../
       dockerfile: frontend/Dockerfile
@@ -96,10 +124,21 @@ services:
       # Mount pnpm store for caching
       - ${PNPM_STORE_PATH:-~/.local/share/pnpm/store}:/root/.local/share/pnpm/store
     working_dir: /app
+    depends_on:
+      - postgres
+      - gateway
+      - langgraph
     environment:
       - NODE_ENV=development
       - WATCHPACK_POLLING=true
       - CI=true
+      - DATABASE_URL=${DATABASE_URL:-postgresql://deerflow:deerflow@postgres:5432/deerflow}
+      - BETTER_AUTH_BASE_URL=${BETTER_AUTH_BASE_URL:-http://localhost:3026}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-deerflow-platform-dev-secret-change-me}
+      - PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS:-admin@local.deerflow}
+      - PLATFORM_BOOTSTRAP_ADMIN_EMAIL=${PLATFORM_BOOTSTRAP_ADMIN_EMAIL:-admin@local.deerflow}
+      - PLATFORM_BOOTSTRAP_ADMIN_NAME=${PLATFORM_BOOTSTRAP_ADMIN_NAME:-Platform Admin}
+      - PLATFORM_BOOTSTRAP_ADMIN_PASSWORD=${PLATFORM_BOOTSTRAP_ADMIN_PASSWORD:-deerflow-platform-admin}
       - DEER_FLOW_INTERNAL_GATEWAY_BASE_URL=http://gateway:8001
       - DEER_FLOW_INTERNAL_LANGGRAPH_BASE_URL=http://langgraph:2024
     env_file:
@@ -119,7 +158,7 @@ services:
         UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.7.20}
         UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
     container_name: deer-flow-gateway
-    command: sh -c "cd backend && uv sync && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port 8001 --reload --reload-include='*.yaml .env' > /app/logs/gateway.log 2>&1"
+    command: sh -c "cd backend && uv sync && PYTHONPATH=. uv run uvicorn app.gateway.app:app --host 0.0.0.0 --port 8001 > /app/logs/gateway.log 2>&1"
     volumes:
       - ../backend/:/app/backend/
       # Preserve the .venv built during Docker image build — mounting the full backend/
@@ -174,7 +213,7 @@ services:
         UV_IMAGE: ${UV_IMAGE:-ghcr.io/astral-sh/uv:0.7.20}
         UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.org/simple}
     container_name: deer-flow-langgraph
-    command: sh -c "cd backend && uv sync && uv run langgraph dev --no-browser --allow-blocking --host 0.0.0.0 --port 2024 --n-jobs-per-worker 10 > /app/logs/langgraph.log 2>&1"
+    command: sh -c "cd backend && uv sync && uv run langgraph dev --no-browser --allow-blocking --no-reload --host 0.0.0.0 --port 2024 --n-jobs-per-worker 10 > /app/logs/langgraph.log 2>&1"
     volumes:
       - ../backend/:/app/backend/
       # Preserve the .venv built during Docker image build — mounting the full backend/
@@ -221,6 +260,7 @@ volumes:
   # image build are not shadowed by the host backend/ directory mount.
   gateway-venv:
   langgraph-venv:
+  postgres-data:
 
 networks:
   deer-flow-dev:

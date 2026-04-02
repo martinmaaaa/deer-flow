@@ -151,6 +151,11 @@ init() {
 start() {
     local sandbox_mode
     local services
+    local with_frontend=0
+
+    if [ "${2:-}" = "--with-frontend" ] || [ "${1:-}" = "--with-frontend" ]; then
+        with_frontend=1
+    fi
 
     echo "=========================================="
     echo "  Starting DeerFlow Docker Development"
@@ -159,10 +164,24 @@ start() {
 
     sandbox_mode="$(detect_sandbox_mode)"
 
-    if [ "$sandbox_mode" = "provisioner" ]; then
-        services="frontend gateway langgraph provisioner nginx"
+    if [ "$with_frontend" -eq 1 ]; then
+        export NGINX_CONF="${NGINX_CONF:-nginx.conf}"
     else
-        services="frontend gateway langgraph nginx"
+        export NGINX_CONF="${NGINX_CONF:-nginx.host-frontend.conf}"
+    fi
+
+    if [ "$sandbox_mode" = "provisioner" ]; then
+        if [ "$with_frontend" -eq 1 ]; then
+            services="frontend gateway langgraph postgres provisioner nginx"
+        else
+            services="gateway langgraph postgres provisioner nginx"
+        fi
+    else
+        if [ "$with_frontend" -eq 1 ]; then
+            services="frontend gateway langgraph postgres nginx"
+        else
+            services="gateway langgraph postgres nginx"
+        fi
     fi
 
     echo -e "${BLUE}Detected sandbox mode: $sandbox_mode${NC}"
@@ -170,6 +189,12 @@ start() {
         echo -e "${BLUE}Provisioner enabled (Kubernetes mode).${NC}"
     else
         echo -e "${BLUE}Provisioner disabled (not required for this sandbox mode).${NC}"
+    fi
+    echo ""
+    if [ "$with_frontend" -eq 1 ]; then
+        echo -e "${BLUE}Frontend mode: Docker container${NC}"
+    else
+        echo -e "${BLUE}Frontend mode: host machine (recommended for speed)${NC}"
     fi
     echo ""
     
@@ -214,15 +239,24 @@ start() {
     fi
 
     echo "Building and starting containers..."
+    if [ "$with_frontend" -eq 0 ]; then
+        cd "$DOCKER_DIR" && $COMPOSE_CMD stop frontend >/dev/null 2>&1 || true
+    fi
     cd "$DOCKER_DIR" && $COMPOSE_CMD up --build -d --remove-orphans $services
     echo ""
     echo "=========================================="
     echo "  DeerFlow Docker is starting!"
     echo "=========================================="
     echo ""
-    echo "  🌐 Application: http://localhost:2026"
-    echo "  📡 API Gateway: http://localhost:2026/api/*"
-    echo "  🤖 LangGraph:   http://localhost:2026/api/langgraph/*"
+    echo "  🌐 Application: http://localhost:3026"
+    if [ "$with_frontend" -eq 0 ]; then
+        echo "  💻 Frontend:    run 'make frontend-dev' on the host"
+        echo "  🗄️  Postgres:    localhost:55432"
+    else
+        echo "  💻 Frontend:    running in Docker"
+    fi
+    echo "  📡 API Gateway: http://localhost:3026/api/*"
+    echo "  🤖 LangGraph:   http://localhost:3026/api/langgraph/*"
     echo ""
     echo "  📋 View logs: make docker-logs"
     echo "  🛑 Stop:      make docker-stop"
@@ -235,8 +269,18 @@ logs() {
     
     case "$1" in
         --frontend)
-            service="frontend"
-            echo -e "${BLUE}Viewing frontend logs...${NC}"
+            if docker ps --format '{{.Names}}' | grep -qx "deer-flow-frontend"; then
+                service="frontend"
+                echo -e "${BLUE}Viewing Docker frontend logs...${NC}"
+            elif [ -f "$PROJECT_ROOT/logs/frontend-host.log" ]; then
+                echo -e "${BLUE}Viewing host frontend logs...${NC}"
+                tail -f "$PROJECT_ROOT/logs/frontend-host.log"
+                return 0
+            else
+                echo -e "${YELLOW}No running Docker frontend container and no host frontend log file found.${NC}"
+                echo "Start the host frontend with: make frontend-dev"
+                return 1
+            fi
             ;;
         --gateway)
             service="gateway"
@@ -301,7 +345,8 @@ help() {
     echo ""
     echo "Commands:"
     echo "  init          - Pull the sandbox image (speeds up first Pod startup)"
-    echo "  start         - Start Docker services (auto-detects sandbox mode from config.yaml)"
+    echo "  start         - Start backend Docker services; frontend runs on host by default"
+    echo "                  --with-frontend  Start the frontend in Docker too"
     echo "  restart       - Restart all running Docker services"
     echo "  logs [option] - View Docker development logs"
     echo "                  --frontend   View frontend logs only"
