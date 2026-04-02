@@ -6,6 +6,7 @@ export interface PlatformAgent {
   category: string;
   model: string | null;
   tool_groups: string[];
+  skills: string[] | null;
   soul: string;
   is_active: boolean;
   granted: boolean;

@@ -14,6 +14,7 @@ type PlatformAgentSeed = {
   category: string;
   model: string | null;
   toolGroups: string[];
+  skills: string[] | null;
   soul: string;
 };
 
@@ -26,6 +27,7 @@ const DEFAULT_PLATFORM_AGENTS: PlatformAgentSeed[] = [
     category: "内容策划",
     model: "deepseek-chat",
     toolGroups: [],
+    skills: null,
     soul: `你是一名服务中小企业的内容选题顾问。
 
 - 目标是快速产出能执行的选题方向，而不是泛泛而谈的灵感清单。
@@ -41,6 +43,7 @@ const DEFAULT_PLATFORM_AGENTS: PlatformAgentSeed[] = [
     category: "内容创作",
     model: "deepseek-chat",
     toolGroups: [],
+    skills: null,
     soul: `你是一名服务中小企业的商业文案顾问。
 
 - 你要兼顾业务目标、中文表达自然度和真实转化场景。
@@ -109,6 +112,7 @@ async function ensurePlatformTables() {
       category TEXT NOT NULL DEFAULT '通用',
       model TEXT,
       tool_groups JSONB NOT NULL DEFAULT '[]'::jsonb,
+      skills JSONB,
       soul TEXT NOT NULL DEFAULT '',
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -147,6 +151,11 @@ async function ensurePlatformTables() {
     CREATE INDEX IF NOT EXISTS idx_conversation_threads_owner_user_id ON conversation_threads(owner_user_id);
     CREATE INDEX IF NOT EXISTS idx_conversation_threads_company_id ON conversation_threads(company_id);
   `);
+
+  await db.query(`
+    ALTER TABLE platform_agents
+    ADD COLUMN IF NOT EXISTS skills JSONB
+  `);
 }
 
 async function seedPlatformAgents() {
@@ -161,9 +170,9 @@ async function seedPlatformAgents() {
     await db.query(
       `
         INSERT INTO platform_agents (
-          id, slug, name, description, category, model, tool_groups, soul, is_active
+          id, slug, name, description, category, model, tool_groups, skills, soul, is_active
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, TRUE)
+        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, TRUE)
       `,
       [
         randomUUID(),
@@ -173,6 +182,7 @@ async function seedPlatformAgents() {
         agent.category,
         agent.model,
         JSON.stringify(agent.toolGroups),
+        agent.skills === null ? null : JSON.stringify(agent.skills),
         agent.soul,
       ],
     );

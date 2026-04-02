@@ -16,6 +16,7 @@ export async function PATCH(
       category: string;
       model?: string | null;
       tool_groups?: string[];
+      skills?: string[] | null;
       soul?: string;
       is_active?: boolean;
     };
@@ -25,6 +26,7 @@ export async function PATCH(
       category: body.category,
       model: body.model ?? null,
       tool_groups: body.tool_groups ?? [],
+      skills: body.skills ?? null,
       soul: body.soul ?? "",
       is_active: body.is_active ?? true,
     });

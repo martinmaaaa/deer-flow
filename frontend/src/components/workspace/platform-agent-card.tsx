@@ -64,6 +64,15 @@ export function PlatformAgentCard({
             ))}
           </div>
         )}
+        {agent.skills && agent.skills.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {agent.skills.map((skill) => (
+              <Badge key={skill} variant="secondary" className="text-xs">
+                {skill}
+              </Badge>
+            ))}
+          </div>
+        )}
       </CardContent>
 
       <CardFooter className="mt-auto pt-0">

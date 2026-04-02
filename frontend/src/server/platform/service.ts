@@ -38,6 +38,7 @@ export type PlatformAgentRecord = {
   category: string;
   model: string | null;
   tool_groups: string[];
+  skills: string[] | null;
   soul: string;
   is_active: boolean;
 };
@@ -198,6 +199,16 @@ function parseToolGroups(raw: unknown): string[] {
   return [];
 }
 
+function parseSkills(raw: unknown): string[] | null {
+  if (raw === null || typeof raw === "undefined") {
+    return null;
+  }
+  if (Array.isArray(raw)) {
+    return raw.filter((item): item is string => typeof item === "string");
+  }
+  return null;
+}
+
 function buildRuntimeAgentName(companySlug: string, platformAgentSlug: string) {
   return `${companySlug}--${platformAgentSlug}`.slice(0, 80);
 }
@@ -301,6 +312,7 @@ export async function listStoreAgentsForUser(userId: string) {
         pa.category,
         pa.model,
         pa.tool_groups,
+        pa.skills,
         pa.soul,
         pa.is_active,
         cag.runtime_agent_name,
@@ -318,6 +330,7 @@ export async function listStoreAgentsForUser(userId: string) {
   return rows.map((row) => ({
     ...row,
     tool_groups: parseToolGroups(row.tool_groups),
+    skills: parseSkills(row.skills),
   })) as StoreAgentRecord[];
 }
 
@@ -457,6 +470,7 @@ async function upsertRuntimeAgent(company: CompanyRecord, agent: PlatformAgentRe
     description: `${company.name} / ${agent.name}`,
     model: agent.model,
     tool_groups: agent.tool_groups.length > 0 ? agent.tool_groups : null,
+    skills: agent.skills,
     soul,
   };
 
@@ -765,7 +779,7 @@ export async function createCompany(name: string) {
 export async function listPlatformAgents() {
   const { rows } = await db.query<PlatformAgentRecord>(
     `
-      SELECT id, slug, name, description, category, model, tool_groups, soul, is_active
+      SELECT id, slug, name, description, category, model, tool_groups, skills, soul, is_active
       FROM platform_agents
       ORDER BY category ASC, name ASC
     `,
@@ -773,6 +787,7 @@ export async function listPlatformAgents() {
   return rows.map((row) => ({
     ...row,
     tool_groups: parseToolGroups(row.tool_groups),
+    skills: parseSkills(row.skills),
   })) as PlatformAgentRecord[];
 }
 
@@ -783,14 +798,15 @@ export async function createPlatformAgent(input: {
   category: string;
   model: string | null;
   tool_groups: string[];
+  skills: string[] | null;
   soul: string;
 }) {
   const id = randomUUID();
   await db.query(
     `
       INSERT INTO platform_agents (
-        id, slug, name, description, category, model, tool_groups, soul, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, TRUE)
+        id, slug, name, description, category, model, tool_groups, skills, soul, is_active
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, TRUE)
     `,
     [
       id,
@@ -800,6 +816,7 @@ export async function createPlatformAgent(input: {
       input.category,
       input.model,
       JSON.stringify(input.tool_groups),
+      input.skills === null ? null : JSON.stringify(input.skills),
       input.soul,
     ],
   );
@@ -814,6 +831,7 @@ export async function updatePlatformAgent(
     category: string;
     model: string | null;
     tool_groups: string[];
+    skills: string[] | null;
     soul: string;
     is_active: boolean;
   },
@@ -827,8 +845,9 @@ export async function updatePlatformAgent(
         category = $4,
         model = $5,
         tool_groups = $6::jsonb,
-        soul = $7,
-        is_active = $8,
+        skills = $7::jsonb,
+        soul = $8,
+        is_active = $9,
         updated_at = NOW()
       WHERE id = $1
     `,
@@ -839,6 +858,7 @@ export async function updatePlatformAgent(
       input.category,
       input.model,
       JSON.stringify(input.tool_groups),
+      input.skills === null ? null : JSON.stringify(input.skills),
       input.soul,
       input.is_active,
     ],
@@ -858,7 +878,7 @@ export async function updatePlatformAgent(
 
   const updatedAgent = await db.query<PlatformAgentRecord>(
     `
-      SELECT id, slug, name, description, category, model, tool_groups, soul, is_active
+      SELECT id, slug, name, description, category, model, tool_groups, skills, soul, is_active
       FROM platform_agents
       WHERE id = $1
       LIMIT 1
@@ -873,6 +893,7 @@ export async function updatePlatformAgent(
   const normalizedAgent = {
     ...agent,
     tool_groups: parseToolGroups(agent.tool_groups),
+    skills: parseSkills(agent.skills),
   } as PlatformAgentRecord;
 
   for (const grant of grants.rows) {
@@ -1053,7 +1074,7 @@ export async function acceptInviteForUser(token: string, user: Session["user"]) 
 export async function setCompanyAgentGrants(companyId: string, platformAgentIds: string[]) {
   const agents = await db.query<PlatformAgentRecord>(
     `
-      SELECT id, slug, name, description, category, model, tool_groups, soul, is_active
+      SELECT id, slug, name, description, category, model, tool_groups, skills, soul, is_active
       FROM platform_agents
       WHERE id = ANY($1::text[])
     `,
@@ -1081,6 +1102,7 @@ export async function setCompanyAgentGrants(companyId: string, platformAgentIds:
   for (const agent of agents.rows.map((row) => ({
     ...row,
     tool_groups: parseToolGroups(row.tool_groups),
+    skills: parseSkills(row.skills),
   } as PlatformAgentRecord))) {
     const runtimeAgentName = await upsertRuntimeAgent(company, agent);
     await db.query(

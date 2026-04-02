@@ -91,6 +91,18 @@ export function AgentCard({ agent }: AgentCardProps) {
           </CardContent>
         )}
 
+        {agent.skills && agent.skills.length > 0 && (
+          <CardContent className="pt-0 pb-3">
+            <div className="flex flex-wrap gap-1">
+              {agent.skills.map((skill) => (
+                <Badge key={skill} variant="secondary" className="text-xs">
+                  {skill}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        )}
+
         <CardFooter className="mt-auto flex items-center justify-between gap-2 pt-3">
           <Button size="sm" className="flex-1" onClick={handleChat}>
             <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />

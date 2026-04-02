@@ -33,9 +33,12 @@ type PlatformAgent = {
   category: string;
   model: string | null;
   tool_groups: string[];
+  skills: string[] | null;
   soul: string;
   is_active: boolean;
 };
+
+type SkillsMode = "inherit" | "disabled" | "custom";
 
 type CompanyDetail = {
   company: { id: string; name: string; slug: string };
@@ -96,6 +99,23 @@ async function api<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   return data;
 }
 
+function parseCommaSeparatedList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function describeAgentSkills(agent: PlatformAgent) {
+  if (agent.skills === null) {
+    return { label: "继承全局 skills", badges: [] as string[] };
+  }
+  if (agent.skills.length === 0) {
+    return { label: "已禁用 skills", badges: [] as string[] };
+  }
+  return { label: null, badges: agent.skills };
+}
+
 function EmptyPanel({
   title,
   description,
@@ -133,6 +153,8 @@ export function AdminConsole({
     description: "",
     model: "deepseek-chat",
     tool_groups: "",
+    skills_mode: "inherit" as SkillsMode,
+    skills: "",
     soul: "",
   });
   const [grantSelection, setGrantSelection] = useState<Record<string, boolean>>({});
@@ -212,16 +234,33 @@ export function AdminConsole({
   }, [companyName, loadBase]);
 
   const createPlatformAgent = useCallback(async () => {
+    const parsedToolGroups = parseCommaSeparatedList(newAgent.tool_groups);
+    const parsedSkills = parseCommaSeparatedList(newAgent.skills);
+    const skills =
+      newAgent.skills_mode === "inherit"
+        ? null
+        : newAgent.skills_mode === "disabled"
+          ? []
+          : parsedSkills;
+
+    if (newAgent.skills_mode === "custom" && parsedSkills.length === 0) {
+      toast.error("自定义 skills 时请至少填写一个 skill 名称");
+      return;
+    }
+
     try {
       await api("/api/app/admin/platform-agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...newAgent,
-          tool_groups: newAgent.tool_groups
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean),
+          slug: newAgent.slug,
+          name: newAgent.name,
+          category: newAgent.category,
+          description: newAgent.description,
+          model: newAgent.model,
+          tool_groups: parsedToolGroups,
+          skills,
+          soul: newAgent.soul,
         }),
       });
       setNewAgent({
@@ -231,6 +270,8 @@ export function AdminConsole({
         description: "",
         model: "deepseek-chat",
         tool_groups: "",
+        skills_mode: "inherit",
+        skills: "",
         soul: "",
       });
       await loadBase();
@@ -559,6 +600,65 @@ export function AdminConsole({
                         }))
                       }
                     />
+                    <div className="space-y-2 rounded-lg border p-3">
+                      <div className="text-sm font-medium">Skills</div>
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            checked={newAgent.skills_mode === "inherit"}
+                            onChange={() =>
+                              setNewAgent((prev) => ({
+                                ...prev,
+                                skills_mode: "inherit",
+                              }))
+                            }
+                          />
+                          继承全局启用 skills
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            checked={newAgent.skills_mode === "disabled"}
+                            onChange={() =>
+                              setNewAgent((prev) => ({
+                                ...prev,
+                                skills_mode: "disabled",
+                              }))
+                            }
+                          />
+                          禁用全部 skills
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            checked={newAgent.skills_mode === "custom"}
+                            onChange={() =>
+                              setNewAgent((prev) => ({
+                                ...prev,
+                                skills_mode: "custom",
+                              }))
+                            }
+                          />
+                          自定义白名单
+                        </label>
+                      </div>
+                      {newAgent.skills_mode === "custom" && (
+                        <Input
+                          placeholder="skills，逗号分隔"
+                          value={newAgent.skills}
+                          onChange={(event) =>
+                            setNewAgent((prev) => ({
+                              ...prev,
+                              skills: event.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                      <div className="text-muted-foreground text-xs">
+                        继承全局会沿用 DeerFlow 当前全局启用的 skills；自定义白名单时只加载这里列出的 skills。
+                      </div>
+                    </div>
                     <Textarea
                       placeholder="描述"
                       value={newAgent.description}
@@ -589,32 +689,47 @@ export function AdminConsole({
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-4 lg:grid-cols-2">
-                      {platformAgents.map((agent) => (
-                        <div key={agent.id} className="rounded-xl border p-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="font-medium">{agent.name}</div>
-                            <Badge variant="secondary">{agent.category}</Badge>
-                            {agent.model && (
-                              <Badge variant="outline">{agent.model}</Badge>
+                      {platformAgents.map((agent) => {
+                        const skillsDisplay = describeAgentSkills(agent);
+                        return (
+                          <div key={agent.id} className="rounded-xl border p-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="font-medium">{agent.name}</div>
+                              <Badge variant="secondary">{agent.category}</Badge>
+                              {agent.model && (
+                                <Badge variant="outline">{agent.model}</Badge>
+                              )}
+                            </div>
+                            <div className="text-muted-foreground mt-2 text-sm">
+                              {agent.description || "暂无描述"}
+                            </div>
+                            <div className="text-muted-foreground mt-3 text-xs">
+                              slug: {agent.slug}
+                            </div>
+                            {agent.tool_groups.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {agent.tool_groups.map((group) => (
+                                  <Badge key={group} variant="outline">
+                                    {group}
+                                  </Badge>
+                                ))}
+                              </div>
                             )}
-                          </div>
-                          <div className="text-muted-foreground mt-2 text-sm">
-                            {agent.description || "暂无描述"}
-                          </div>
-                          <div className="text-muted-foreground mt-3 text-xs">
-                            slug: {agent.slug}
-                          </div>
-                          {agent.tool_groups.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-2">
-                              {agent.tool_groups.map((group) => (
-                                <Badge key={group} variant="outline">
-                                  {group}
+                              {skillsDisplay.label && (
+                                <Badge variant="secondary">
+                                  {skillsDisplay.label}
+                                </Badge>
+                              )}
+                              {skillsDisplay.badges.map((skill) => (
+                                <Badge key={skill} variant="outline">
+                                  {skill}
                                 </Badge>
                               ))}
                             </div>
-                          )}
-                        </div>
-                      ))}
+                          </div>
+                        );
+                      })}
                     </div>
                   </CardContent>
                 </Card>
