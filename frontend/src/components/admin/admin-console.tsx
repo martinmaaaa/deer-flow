@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import type { Skill } from "@/core/skills/type";
 
 type Company = {
   id: string;
@@ -37,8 +38,6 @@ type PlatformAgent = {
   soul: string;
   is_active: boolean;
 };
-
-type SkillsMode = "inherit" | "disabled" | "custom";
 
 type CompanyDetail = {
   company: { id: string; name: string; slug: string };
@@ -106,16 +105,6 @@ function parseCommaSeparatedList(value: string) {
     .filter(Boolean);
 }
 
-function describeAgentSkills(agent: PlatformAgent) {
-  if (agent.skills === null) {
-    return { label: "继承全局 skills", badges: [] as string[] };
-  }
-  if (agent.skills.length === 0) {
-    return { label: "已禁用 skills", badges: [] as string[] };
-  }
-  return { label: null, badges: agent.skills };
-}
-
 function EmptyPanel({
   title,
   description,
@@ -142,6 +131,7 @@ export function AdminConsole({
 }) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [platformAgents, setPlatformAgents] = useState<PlatformAgent[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [selectedCompanyDetail, setSelectedCompanyDetail] = useState<CompanyDetail | null>(null);
   const [companyName, setCompanyName] = useState("");
@@ -153,8 +143,7 @@ export function AdminConsole({
     description: "",
     model: "deepseek-chat",
     tool_groups: "",
-    skills_mode: "inherit" as SkillsMode,
-    skills: "",
+    skills: [] as string[],
     soul: "",
   });
   const [grantSelection, setGrantSelection] = useState<Record<string, boolean>>({});
@@ -170,12 +159,14 @@ export function AdminConsole({
   );
 
   const loadBase = useCallback(async () => {
-    const [companyRes, agentRes] = await Promise.all([
+    const [companyRes, agentRes, skillRes] = await Promise.all([
       api<{ companies: Company[] }>("/api/app/admin/companies"),
       api<{ agents: PlatformAgent[] }>("/api/app/admin/platform-agents"),
+      api<{ skills: Skill[] }>("/api/skills"),
     ]);
     setCompanies(companyRes.companies);
     setPlatformAgents(agentRes.agents);
+    setAvailableSkills(skillRes.skills);
     if (!selectedCompanyId) {
       const storedCompanyId =
         typeof window === "undefined"
@@ -235,18 +226,6 @@ export function AdminConsole({
 
   const createPlatformAgent = useCallback(async () => {
     const parsedToolGroups = parseCommaSeparatedList(newAgent.tool_groups);
-    const parsedSkills = parseCommaSeparatedList(newAgent.skills);
-    const skills =
-      newAgent.skills_mode === "inherit"
-        ? null
-        : newAgent.skills_mode === "disabled"
-          ? []
-          : parsedSkills;
-
-    if (newAgent.skills_mode === "custom" && parsedSkills.length === 0) {
-      toast.error("自定义 skills 时请至少填写一个 skill 名称");
-      return;
-    }
 
     try {
       await api("/api/app/admin/platform-agents", {
@@ -259,7 +238,7 @@ export function AdminConsole({
           description: newAgent.description,
           model: newAgent.model,
           tool_groups: parsedToolGroups,
-          skills,
+          skills: newAgent.skills,
           soul: newAgent.soul,
         }),
       });
@@ -270,8 +249,7 @@ export function AdminConsole({
         description: "",
         model: "deepseek-chat",
         tool_groups: "",
-        skills_mode: "inherit",
-        skills: "",
+        skills: [],
         soul: "",
       });
       await loadBase();
@@ -329,6 +307,25 @@ export function AdminConsole({
       toast.error(error instanceof Error ? error.message : "保存授权失败");
     }
   }, [grantSelection, loadBase, loadCompanyDetail, selectedCompany]);
+
+  const toggleSkillSelection = useCallback((skillName: string, checked: boolean) => {
+    setNewAgent((prev) => {
+      if (checked) {
+        if (prev.skills.includes(skillName)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          skills: [...prev.skills, skillName],
+        };
+      }
+
+      return {
+        ...prev,
+        skills: prev.skills.filter((name) => name !== skillName),
+      };
+    });
+  }, []);
 
   return (
     <div className="flex size-full flex-col overflow-hidden">
@@ -602,61 +599,45 @@ export function AdminConsole({
                     />
                     <div className="space-y-2 rounded-lg border p-3">
                       <div className="text-sm font-medium">Skills</div>
-                      <div className="flex flex-wrap gap-3 text-sm">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            checked={newAgent.skills_mode === "inherit"}
-                            onChange={() =>
-                              setNewAgent((prev) => ({
-                                ...prev,
-                                skills_mode: "inherit",
-                              }))
-                            }
-                          />
-                          继承全局启用 skills
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            checked={newAgent.skills_mode === "disabled"}
-                            onChange={() =>
-                              setNewAgent((prev) => ({
-                                ...prev,
-                                skills_mode: "disabled",
-                              }))
-                            }
-                          />
-                          禁用全部 skills
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            checked={newAgent.skills_mode === "custom"}
-                            onChange={() =>
-                              setNewAgent((prev) => ({
-                                ...prev,
-                                skills_mode: "custom",
-                              }))
-                            }
-                          />
-                          自定义白名单
-                        </label>
+                      <div className="text-muted-foreground text-xs">
+                        勾选后会作为这个智能体的 skills 白名单写入 runtime agent；不勾选就不会绑定任何 skills。
                       </div>
-                      {newAgent.skills_mode === "custom" && (
-                        <Input
-                          placeholder="skills，逗号分隔"
-                          value={newAgent.skills}
-                          onChange={(event) =>
-                            setNewAgent((prev) => ({
-                              ...prev,
-                              skills: event.target.value,
-                            }))
-                          }
-                        />
+                      {availableSkills.length === 0 ? (
+                        <div className="text-muted-foreground text-sm">
+                          当前没有可绑定的 skills。
+                        </div>
+                      ) : (
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {availableSkills.map((skill) => (
+                            <label
+                              key={skill.name}
+                              className="flex items-start gap-3 rounded-lg border p-3"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={newAgent.skills.includes(skill.name)}
+                                onChange={(event) =>
+                                  toggleSkillSelection(skill.name, event.target.checked)
+                                }
+                              />
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">{skill.name}</span>
+                                  <Badge variant="outline">{skill.category}</Badge>
+                                  {!skill.enabled && (
+                                    <Badge variant="secondary">未启用</Badge>
+                                  )}
+                                </div>
+                                <div className="text-muted-foreground mt-1 text-xs">
+                                  {skill.description}
+                                </div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
                       )}
                       <div className="text-muted-foreground text-xs">
-                        继承全局会沿用 DeerFlow 当前全局启用的 skills；自定义白名单时只加载这里列出的 skills。
+                        已选择 {newAgent.skills.length} 个 skills。
                       </div>
                     </div>
                     <Textarea
@@ -690,7 +671,7 @@ export function AdminConsole({
                   <CardContent>
                     <div className="grid gap-4 lg:grid-cols-2">
                       {platformAgents.map((agent) => {
-                        const skillsDisplay = describeAgentSkills(agent);
+                        const boundSkills = agent.skills ?? [];
                         return (
                           <div key={agent.id} className="rounded-xl border p-4">
                             <div className="flex flex-wrap items-center gap-2">
@@ -715,18 +696,20 @@ export function AdminConsole({
                                 ))}
                               </div>
                             )}
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {skillsDisplay.label && (
-                                <Badge variant="secondary">
-                                  {skillsDisplay.label}
-                                </Badge>
-                              )}
-                              {skillsDisplay.badges.map((skill) => (
-                                <Badge key={skill} variant="outline">
-                                  {skill}
-                                </Badge>
-                              ))}
-                            </div>
+                            {boundSkills.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {boundSkills.map((skill) => (
+                                  <Badge key={skill} variant="secondary">
+                                    {skill}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                            {boundSkills.length === 0 && (
+                              <div className="text-muted-foreground mt-3 text-xs">
+                                当前未绑定 skills
+                              </div>
+                            )}
                           </div>
                         );
                       })}
