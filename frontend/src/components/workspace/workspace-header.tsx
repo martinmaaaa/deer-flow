@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquarePlus } from "lucide-react";
+import { Building2, LayoutPanelTop, MessageSquarePlus } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,14 +11,25 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useI18n } from "@/core/i18n/hooks";
+import { useWorkspaceSession } from "@/core/platform/hooks";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
 export function WorkspaceHeader({ className }: { className?: string }) {
-  const { t } = useI18n();
   const { state } = useSidebar();
   const pathname = usePathname();
+  const { session } = useWorkspaceSession();
+  const companyName = session?.company?.name ?? null;
+  const adminOnly = !!session?.isPlatformAdmin && !session?.company;
+  const title = adminOnly ? "平台后台" : "DeerFlow";
+  const subtitle = adminOnly ? "运营与租户管理" : companyName;
+  const primaryHref = adminOnly ? "/admin/companies" : "/workspace/agents";
+  const primaryLabel = adminOnly ? "平台后台" : "开始新对话";
+  const primaryActive = adminOnly
+    ? pathname.startsWith("/admin")
+    : pathname === "/workspace/agents";
+  const PrimaryIcon = adminOnly ? LayoutPanelTop : MessageSquarePlus;
+
   return (
     <>
       <div
@@ -37,12 +48,24 @@ export function WorkspaceHeader({ className }: { className?: string }) {
         ) : (
           <div className="flex items-center justify-between gap-2">
             {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ? (
-              <Link href="/" className="text-primary ml-2 font-serif">
-                DeerFlow
+              <Link href="/" className="ml-2 min-w-0">
+                <div className="text-primary font-serif">{title}</div>
+                {subtitle && (
+                  <div className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[11px]">
+                    <Building2 className="h-3 w-3" />
+                    <span className="truncate">{subtitle}</span>
+                  </div>
+                )}
               </Link>
             ) : (
-              <div className="text-primary ml-2 cursor-default font-serif">
-                DeerFlow
+              <div className="ml-2 min-w-0 cursor-default">
+                <div className="text-primary font-serif">{title}</div>
+                {subtitle && (
+                  <div className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[11px]">
+                    <Building2 className="h-3 w-3" />
+                    <span className="truncate">{subtitle}</span>
+                  </div>
+                )}
               </div>
             )}
             <SidebarTrigger />
@@ -52,12 +75,12 @@ export function WorkspaceHeader({ className }: { className?: string }) {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
-            isActive={pathname === "/workspace/chats/new"}
+            isActive={primaryActive}
             asChild
           >
-            <Link className="text-muted-foreground" href="/workspace/chats/new">
-              <MessageSquarePlus size={16} />
-              <span>{t.sidebar.newChat}</span>
+            <Link className="text-muted-foreground" href={primaryHref}>
+              <PrimaryIcon size={16} />
+              <span>{primaryLabel}</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

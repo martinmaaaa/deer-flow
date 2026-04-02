@@ -1,5 +1,5 @@
-import { AgentGallery } from "@/components/workspace/agents/agent-gallery";
+import { PlatformAgentGallery } from "@/components/workspace/platform-agent-gallery";
 
 export default function AgentsPage() {
-  return <AgentGallery />;
+  return <PlatformAgentGallery />;
 }

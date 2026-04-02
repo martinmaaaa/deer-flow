@@ -5,7 +5,7 @@ function getBaseOrigin() {
     return window.location.origin;
   }
   // Fallback for SSR
-  return "http://localhost:2026";
+  return "http://localhost:3026";
 }
 
 export function getBackendBaseURL() {
@@ -30,11 +30,9 @@ export function getLangGraphBaseURL(isMock?: boolean) {
     }
     return "http://localhost:3000/mock/api";
   } else {
-    // LangGraph SDK requires a full URL, construct it from current origin
     if (typeof window !== "undefined") {
-      return `${window.location.origin}/api/langgraph`;
+      return `${window.location.origin}/api/app/langgraph`;
     }
-    // Fallback for SSR
-    return "http://localhost:2026/api/langgraph";
+    return "http://localhost:3026/api/app/langgraph";
   }
 }

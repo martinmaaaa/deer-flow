@@ -51,7 +51,7 @@ export async function uploadFiles(
   });
 
   const response = await fetch(
-    `${getBackendBaseURL()}/api/threads/${threadId}/uploads`,
+    `${getBackendBaseURL()}/api/app/threads/${threadId}/uploads`,
     {
       method: "POST",
       body: formData,

@@ -2,8 +2,21 @@ import type { Message } from "@langchain/langgraph-sdk";
 
 import type { AgentThread } from "./types";
 
-export function pathOfThread(threadId: string) {
-  return `/workspace/chats/${threadId}`;
+function threadMetadata(thread: AgentThread) {
+  return thread.metadata as Record<string, unknown> | undefined;
+}
+
+export function pathOfThread(thread: AgentThread | string) {
+  if (typeof thread === "string") {
+    return `/workspace/chats/${thread}`;
+  }
+
+  const slug = threadMetadata(thread)?.platform_agent_slug;
+  if (typeof slug === "string" && slug.length > 0) {
+    return `/workspace/agents/${slug}/chats/${thread.thread_id}`;
+  }
+
+  return `/workspace/chats/${thread.thread_id}`;
 }
 
 export function textOfMessage(message: Message) {
@@ -19,6 +32,11 @@ export function textOfMessage(message: Message) {
   return null;
 }
 
+export function agentNameOfThread(thread: AgentThread) {
+  const name = threadMetadata(thread)?.platform_agent_name;
+  return typeof name === "string" && name.length > 0 ? name : null;
+}
+
 export function titleOfThread(thread: AgentThread) {
-  return thread.values?.title ?? "Untitled";
+  return thread.values?.title ?? agentNameOfThread(thread) ?? "Untitled";
 }

@@ -29,11 +29,19 @@ cp .env.example .env
 ### Development
 
 ```bash
-# Start development server
-pnpm dev
+# Recommended: keep backend in Docker, run frontend on the host
+make docker-start
+make frontend-dev
 
-# The app will be available at http://localhost:3000
+# Public app URL: http://localhost:3026
+# Frontend dev server: http://localhost:3000
 ```
+
+Why this is faster on macOS:
+
+- `gateway`, `langgraph`, `postgres`, and `nginx` stay in Docker
+- `Next.js` runs directly on the host, avoiding slow Docker bind-mount cold compiles
+- nginx proxies browser traffic on `http://localhost:3026` to the host frontend
 
 ### Build
 
