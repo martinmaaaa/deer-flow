@@ -191,6 +191,24 @@ export function useThreadStream({
       toast.error(getStreamErrorMessage(error));
     },
     onFinish(state) {
+      const finalTitle = state.values?.title;
+      const persistedThreadId = threadIdRef.current;
+
+      if (!isMock && persistedThreadId && finalTitle?.trim()) {
+        void fetch(
+          `${getBackendBaseURL()}/api/app/threads/${encodeURIComponent(persistedThreadId)}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ title: finalTitle.trim() }),
+          },
+        ).catch(() => {
+          // Best effort only: the local cache is still invalidated below.
+        });
+      }
+
       listeners.current.onFinish?.(state.values);
       void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
     },
