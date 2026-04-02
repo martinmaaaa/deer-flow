@@ -85,10 +85,10 @@ export function useThreadStream({
   useEffect(() => {
     const normalizedThreadId = threadId ?? null;
     if (!normalizedThreadId) {
-      // Just reset for new thread creation when threadId becomes null/undefined
+      // Reset when entering new-thread mode so the next stream can create one.
       startedRef.current = false;
-      setOnStreamThreadId(normalizedThreadId);
     }
+    setOnStreamThreadId(normalizedThreadId);
     threadIdRef.current = normalizedThreadId;
   }, [threadId]);
 
