@@ -360,6 +360,13 @@ make format     # Format code (ruff)
 uv run pytest
 ```
 
+Docker development users can run backend tests inside the gateway container:
+
+```bash
+make docker-test-backend
+make docker-test-backend-file TEST=tests/test_skills_parser.py
+```
+
 ---
 
 ## Technology Stack

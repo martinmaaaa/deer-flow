@@ -1,6 +1,6 @@
 # DeerFlow - Unified Development Environment
 
-.PHONY: help config config-upgrade check install dev dev-daemon start stop up down clean docker-init docker-start docker-start-full docker-stop docker-logs docker-logs-frontend docker-logs-gateway frontend-dev
+.PHONY: help config config-upgrade check install dev dev-daemon start stop up down clean docker-init docker-start docker-start-full docker-stop docker-logs docker-logs-frontend docker-logs-gateway frontend-dev docker-test-backend docker-test-backend-file
 
 BASH ?= bash
 
@@ -38,6 +38,8 @@ help:
 	@echo "  make docker-logs     - View Docker development logs"
 	@echo "  make docker-logs-frontend - View Docker frontend logs"
 	@echo "  make docker-logs-gateway - View Docker gateway logs"
+	@echo "  make docker-test-backend - Run backend pytest inside the gateway container"
+	@echo "  make docker-test-backend-file TEST=tests/test_x.py - Run a specific backend pytest file"
 
 config:
 	@$(PYTHON) ./scripts/configure.py
@@ -182,6 +184,18 @@ docker-logs-frontend:
 	@./scripts/docker.sh logs --frontend
 docker-logs-gateway:
 	@./scripts/docker.sh logs --gateway
+
+# Run backend tests inside the gateway container using the project virtualenv
+docker-test-backend:
+	@docker exec deer-flow-gateway sh -lc "cd /app/backend && uv run pytest"
+
+# Run a specific backend pytest target, e.g. make docker-test-backend-file TEST=tests/test_skills_parser.py
+docker-test-backend-file:
+	@if [ -z "$(TEST)" ]; then \
+		echo "Usage: make docker-test-backend-file TEST=tests/test_example.py"; \
+		exit 1; \
+	fi
+	@docker exec deer-flow-gateway sh -lc "cd /app/backend && uv run pytest $(TEST)"
 
 # ==========================================
 # Production Docker Commands
