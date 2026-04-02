@@ -2,12 +2,14 @@
 
 .PHONY: help config config-upgrade check install dev dev-daemon start stop up down clean docker-init docker-start docker-start-full docker-stop docker-logs docker-logs-frontend docker-logs-gateway frontend-dev
 
-PYTHON ?= python
 BASH ?= bash
 
 # Detect OS for Windows compatibility
 ifeq ($(OS),Windows_NT)
     SHELL := cmd.exe
+    PYTHON ?= python
+else
+    PYTHON ?= python3
 endif
 
 help:
@@ -98,6 +100,7 @@ setup-sandbox:
 
 # Start all services in development mode (with hot-reloading)
 dev:
+	@$(PYTHON) ./scripts/check.py
 ifeq ($(OS),Windows_NT)
 	@call scripts\run-with-git-bash.cmd ./scripts/serve.sh --dev
 else
@@ -106,6 +109,7 @@ endif
 
 # Start all services in production mode (with optimizations)
 start:
+	@$(PYTHON) ./scripts/check.py
 ifeq ($(OS),Windows_NT)
 	@call scripts\run-with-git-bash.cmd ./scripts/serve.sh --prod
 else
@@ -114,7 +118,12 @@ endif
 
 # Start all services in daemon mode (background)
 dev-daemon:
+	@$(PYTHON) ./scripts/check.py
+ifeq ($(OS),Windows_NT)
+	@call scripts\run-with-git-bash.cmd ./scripts/start-daemon.sh
+else
 	@./scripts/start-daemon.sh
+endif
 
 # Stop all services
 stop:
