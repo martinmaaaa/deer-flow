@@ -1,5 +1,12 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
 
+import type {
+  CompanyMemoryPreview,
+  CompanyMemoryPreviewFact,
+  CompanyMemoryPreviewSection,
+  CompanyMemoryPreviewSectionSource,
+  CompanyMemorySourceAgent,
+} from "@/core/platform/types";
 import { env } from "@/env";
 import type { Session } from "@/server/better-auth";
 
@@ -72,6 +79,95 @@ type InviteRecord = {
   company_name?: string;
   company_slug?: string;
 };
+
+type MemorySectionKey =
+  | "workContext"
+  | "personalContext"
+  | "topOfMind"
+  | "recentMonths"
+  | "earlierContext"
+  | "longTermBackground";
+
+type MemorySectionData = {
+  summary: string;
+  updatedAt: string;
+};
+
+type GatewayMemoryFact = {
+  id: string;
+  content: string;
+  category: string;
+  confidence: number;
+  createdAt: string;
+  source: string;
+  sourceError?: string | null;
+};
+
+type GatewayMemoryResponse = {
+  version: string;
+  lastUpdated: string;
+  user: {
+    workContext: MemorySectionData;
+    personalContext: MemorySectionData;
+    topOfMind: MemorySectionData;
+  };
+  history: {
+    recentMonths: MemorySectionData;
+    earlierContext: MemorySectionData;
+    longTermBackground: MemorySectionData;
+  };
+  facts: GatewayMemoryFact[];
+};
+
+const MEMORY_SECTION_KEYS: MemorySectionKey[] = [
+  "workContext",
+  "personalContext",
+  "topOfMind",
+  "recentMonths",
+  "earlierContext",
+  "longTermBackground",
+];
+
+function emptyPreviewSection(): CompanyMemoryPreviewSection {
+  return {
+    summary: "",
+    updatedAt: "",
+    sources: [],
+  };
+}
+
+function getSectionData(
+  memory: GatewayMemoryResponse,
+  key: MemorySectionKey,
+): MemorySectionData {
+  switch (key) {
+    case "workContext":
+      return memory.user.workContext;
+    case "personalContext":
+      return memory.user.personalContext;
+    case "topOfMind":
+      return memory.user.topOfMind;
+    case "recentMonths":
+      return memory.history.recentMonths;
+    case "earlierContext":
+      return memory.history.earlierContext;
+    case "longTermBackground":
+      return memory.history.longTermBackground;
+  }
+}
+
+function latestIsoTimestamp(values: Array<string | undefined | null>) {
+  return values
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .sort()
+    .at(-1) ?? "";
+}
+
+function buildSectionSummary(sources: CompanyMemoryPreviewSectionSource[]) {
+  return sources
+    .map((source) => `### ${source.agentName}\n${source.summary.trim()}`)
+    .join("\n\n");
+}
 
 function slugifyCompanyName(input: string) {
   const normalized = input.trim().toLowerCase();
@@ -381,6 +477,137 @@ async function upsertRuntimeAgent(company: CompanyRecord, agent: PlatformAgentRe
   }
 
   return runtimeAgentName;
+}
+
+export async function getCompanyMemoryPreviewForUser(
+  userId: string,
+): Promise<CompanyMemoryPreview> {
+  const membership = await getCompanyMembershipByUserId(userId);
+  if (!membership) {
+    throw new Error("You are not assigned to a company yet.");
+  }
+
+  const grantedAgents = await listGrantedAgentsForUser(userId);
+  const sourceAgents: CompanyMemorySourceAgent[] = grantedAgents
+    .filter(
+      (agent): agent is typeof agent & { runtime_agent_name: string } =>
+        typeof agent.runtime_agent_name === "string" &&
+        agent.runtime_agent_name.trim().length > 0,
+    )
+    .map((agent) => ({
+      agentSlug: agent.slug,
+      agentName: agent.name,
+      runtimeAgentName: agent.runtime_agent_name,
+    }));
+
+  const emptyPreview: CompanyMemoryPreview = {
+    scope: "company",
+    company: {
+      id: membership.company_id,
+      slug: membership.company_slug,
+      name: membership.company_name,
+    },
+    sourceAgents,
+    lastUpdated: "",
+    sections: {
+      workContext: emptyPreviewSection(),
+      personalContext: emptyPreviewSection(),
+      topOfMind: emptyPreviewSection(),
+      recentMonths: emptyPreviewSection(),
+      earlierContext: emptyPreviewSection(),
+      longTermBackground: emptyPreviewSection(),
+    },
+    facts: [],
+  };
+
+  if (sourceAgents.length === 0) {
+    return emptyPreview;
+  }
+
+  const memoryResults = await Promise.all(
+    sourceAgents.map(async (agent) => {
+      try {
+        const response = await gatewayFetch(
+          `/api/memory?agent_name=${encodeURIComponent(agent.runtimeAgentName)}`,
+        );
+        const memory = (await response.json()) as GatewayMemoryResponse;
+        return { agent, memory };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const availableMemory = memoryResults.filter(
+    (
+      result,
+    ): result is {
+      agent: CompanyMemorySourceAgent;
+      memory: GatewayMemoryResponse;
+    } => result !== null,
+  );
+
+  if (availableMemory.length === 0) {
+    return emptyPreview;
+  }
+
+  const sections = MEMORY_SECTION_KEYS.reduce<
+    Record<MemorySectionKey, CompanyMemoryPreviewSection>
+  >((accumulator, key) => {
+    const sources = availableMemory
+      .map(({ agent, memory }) => {
+        const section = getSectionData(memory, key);
+        const summary = section.summary.trim();
+        if (!summary) {
+          return null;
+        }
+
+        return {
+          ...agent,
+          summary,
+          updatedAt: section.updatedAt || memory.lastUpdated || "",
+        };
+      })
+      .filter(
+        (source): source is CompanyMemoryPreviewSectionSource => source !== null,
+      );
+
+    accumulator[key] = {
+      summary: buildSectionSummary(sources),
+      updatedAt: latestIsoTimestamp(sources.map((source) => source.updatedAt)),
+      sources,
+    };
+    return accumulator;
+  }, {
+    workContext: emptyPreviewSection(),
+    personalContext: emptyPreviewSection(),
+    topOfMind: emptyPreviewSection(),
+    recentMonths: emptyPreviewSection(),
+    earlierContext: emptyPreviewSection(),
+    longTermBackground: emptyPreviewSection(),
+  });
+
+  const facts = availableMemory
+    .flatMap(({ agent, memory }) =>
+      memory.facts.map<CompanyMemoryPreviewFact>((fact) => ({
+        ...fact,
+        agentSlug: agent.agentSlug,
+        agentName: agent.agentName,
+        runtimeAgentName: agent.runtimeAgentName,
+      })),
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  return {
+    ...emptyPreview,
+    lastUpdated: latestIsoTimestamp([
+      ...availableMemory.map(({ memory }) => memory.lastUpdated),
+      ...MEMORY_SECTION_KEYS.map((key) => sections[key].updatedAt),
+      ...facts.map((fact) => fact.createdAt),
+    ]),
+    sections,
+    facts,
+  };
 }
 
 export async function createThreadForUser(userId: string, agentSlug: string) {

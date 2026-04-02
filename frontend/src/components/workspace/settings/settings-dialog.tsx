@@ -24,6 +24,7 @@ import { NotificationSettingsPage } from "@/components/workspace/settings/notifi
 import { SkillSettingsPage } from "@/components/workspace/settings/skill-settings-page";
 import { ToolSettingsPage } from "@/components/workspace/settings/tool-settings-page";
 import { useI18n } from "@/core/i18n/hooks";
+import { useWorkspaceSession } from "@/core/platform/hooks";
 import { cn } from "@/lib/utils";
 
 type SettingsSection =
@@ -38,41 +39,52 @@ type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
 };
 
+type SettingsNavSection = {
+  id: SettingsSection;
+  label: string;
+  icon: typeof PaletteIcon;
+};
+
+function isSettingsNavSection(
+  section: SettingsNavSection | null,
+): section is SettingsNavSection {
+  return section !== null;
+}
+
 export function SettingsDialog(props: SettingsDialogProps) {
   const { defaultSection = "appearance", ...dialogProps } = props;
   const { t } = useI18n();
+  const { session } = useWorkspaceSession();
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
 
-  useEffect(() => {
-    // When opening the dialog, ensure the active section follows the caller's intent.
-    // This allows triggers like "About" to open the dialog directly on that page.
-    if (dialogProps.open) {
-      setActiveSection(defaultSection);
-    }
-  }, [defaultSection, dialogProps.open]);
+  const sections = useMemo<SettingsNavSection[]>(
+    () => {
+      const items: Array<SettingsNavSection | null> = [
+        {
+          id: "appearance",
+          label: t.settings.sections.appearance,
+          icon: PaletteIcon,
+        },
+        {
+          id: "notification",
+          label: t.settings.sections.notification,
+          icon: BellIcon,
+        },
+        session?.company
+          ? {
+              id: "memory",
+              label: t.settings.sections.memory,
+              icon: BrainIcon,
+            }
+          : null,
+        { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
+        { id: "skills", label: t.settings.sections.skills, icon: SparklesIcon },
+        { id: "about", label: t.settings.sections.about, icon: InfoIcon },
+      ];
 
-  const sections = useMemo(
-    () => [
-      {
-        id: "appearance",
-        label: t.settings.sections.appearance,
-        icon: PaletteIcon,
-      },
-      {
-        id: "notification",
-        label: t.settings.sections.notification,
-        icon: BellIcon,
-      },
-      {
-        id: "memory",
-        label: t.settings.sections.memory,
-        icon: BrainIcon,
-      },
-      { id: "tools", label: t.settings.sections.tools, icon: WrenchIcon },
-      { id: "skills", label: t.settings.sections.skills, icon: SparklesIcon },
-      { id: "about", label: t.settings.sections.about, icon: InfoIcon },
-    ],
+      return items.filter(isSettingsNavSection);
+    },
     [
       t.settings.sections.appearance,
       t.settings.sections.memory,
@@ -80,8 +92,19 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.skills,
       t.settings.sections.notification,
       t.settings.sections.about,
+      session?.company,
     ],
   );
+
+  useEffect(() => {
+    if (!dialogProps.open) {
+      return;
+    }
+
+    const canUseDefault = sections.some((section) => section.id === defaultSection);
+    setActiveSection(canUseDefault ? defaultSection : "appearance");
+  }, [defaultSection, dialogProps.open, sections]);
+
   return (
     <Dialog
       {...dialogProps}
@@ -106,7 +129,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   <li key={id}>
                     <button
                       type="button"
-                      onClick={() => setActiveSection(id as SettingsSection)}
+                      onClick={() => setActiveSection(id)}
                       className={cn(
                         "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                         active

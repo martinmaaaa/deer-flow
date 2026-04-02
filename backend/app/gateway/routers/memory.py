@@ -1,6 +1,6 @@
-"""Memory API router for retrieving and managing global memory data."""
+"""Memory API router for retrieving and managing global or per-agent memory data."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from deerflow.agents.memory.updater import (
@@ -111,10 +111,12 @@ class MemoryStatusResponse(BaseModel):
     response_model=MemoryResponse,
     response_model_exclude_none=True,
     summary="Get Memory Data",
-    description="Retrieve the current global memory data including user context, history, and facts.",
+    description="Retrieve the current memory data including user context, history, and facts. When agent_name is provided, reads per-agent memory instead of the global memory file.",
 )
-async def get_memory() -> MemoryResponse:
-    """Get the current global memory data.
+async def get_memory(
+    agent_name: str | None = Query(default=None, description="Optional runtime agent name for per-agent memory lookup."),
+) -> MemoryResponse:
+    """Get the current memory data.
 
     Returns:
         The current memory data with user context, history, and facts.
@@ -147,7 +149,7 @@ async def get_memory() -> MemoryResponse:
         }
         ```
     """
-    memory_data = get_memory_data()
+    memory_data = get_memory_data(agent_name=agent_name)
     return MemoryResponse(**memory_data)
 
 

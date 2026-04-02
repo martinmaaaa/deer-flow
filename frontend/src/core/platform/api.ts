@@ -1,4 +1,5 @@
 import type {
+  CompanyMemoryPreview,
   PlatformAgent,
   PlatformThreadCreateResult,
   WorkspaceSession,
@@ -41,4 +42,9 @@ export async function createPlatformThread(agentSlug: string) {
 export async function getWorkspaceSession() {
   const response = await fetch("/api/app/session");
   return parseResponse<WorkspaceSession>(response);
+}
+
+export async function getCompanyMemoryPreview() {
+  const response = await fetch("/api/app/memory");
+  return parseResponse<CompanyMemoryPreview>(response);
 }

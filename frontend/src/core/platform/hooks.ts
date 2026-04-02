@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  getCompanyMemoryPreview,
   getPlatformAgent,
   getWorkspaceSession,
   listMyAgents,
@@ -53,6 +54,19 @@ export function useWorkspaceSession() {
 
   return {
     session: query.data ?? null,
+    isLoading: query.isLoading,
+    error: query.error,
+  };
+}
+
+export function useCompanyMemoryPreview() {
+  const query = useQuery({
+    queryKey: ["company-memory-preview"],
+    queryFn: getCompanyMemoryPreview,
+  });
+
+  return {
+    preview: query.data ?? null,
     isLoading: query.isLoading,
     error: query.error,
   };

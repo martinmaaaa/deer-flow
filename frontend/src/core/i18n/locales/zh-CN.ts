@@ -298,7 +298,25 @@ export const zhCN: Translations = {
     memory: {
       title: "记忆",
       description:
-        "DeerFlow 会在后台不断从你的对话中自动学习。这些记忆能帮助 DeerFlow 更好地理解你，并提供更个性化的体验。",
+        "这里展示 DeerFlow 自动记忆在当前公司范围内的生效方式和聚合预览。",
+      automaticTitle: "自动记忆说明",
+      automaticDescription:
+        "DeerFlow 会在后台持续从你们公司的对话中自动学习，用来改善后续输出。这里展示的是自动运行记忆，不是可手工维护的公司资料系统。",
+      scopeTitle: "当前作用范围",
+      scopeDescription:
+        "设置页按公司视角聚合展示自动记忆，方便企业成员理解当前会共享到哪里。",
+      scopeCompanyBadge: "公司级聚合视角",
+      scopeCompanyLabel: "当前公司",
+      scopeAgentsLabel: "纳入展示的智能体数",
+      scopeRuntimeNote:
+        "注意：底层运行时记忆仍然按“同公司 + 同智能体”隔离存储；这里只是在设置页做公司范围聚合展示。",
+      previewTitle: "公司级聚合预览",
+      previewDescription:
+        "下面汇总当前公司下已生成 runtime agent 的自动记忆摘要与事实，帮助你理解 DeerFlow 正在学习什么。",
+      previewNoAgents: "当前公司还没有已生成的 runtime agent 记忆可供展示。",
+      previewEmpty: "当前公司已有智能体作用域，但还没有可展示的自动记忆内容。",
+      sourceAgentsTitle: "纳入聚合的智能体",
+      factsAgentLabel: "来源智能体",
       empty: "暂无可展示的记忆数据。",
       rawJson: "原始 JSON",
       exportButton: "导出记忆",
