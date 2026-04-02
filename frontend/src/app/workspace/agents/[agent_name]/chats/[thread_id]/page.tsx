@@ -20,7 +20,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { useNotification } from "@/core/notification/hooks";
 import { createPlatformThread } from "@/core/platform/api";
 import { usePlatformAgent } from "@/core/platform/hooks";
-import { useLocalSettings } from "@/core/settings";
+import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
 import { textOfMessage } from "@/core/threads/utils";
 import { env } from "@/env";
@@ -28,7 +28,6 @@ import { cn } from "@/lib/utils";
 
 export default function AgentChatPage() {
   const { t } = useI18n();
-  const [settings, setSettings] = useLocalSettings();
   const router = useRouter();
   const { showNotification } = useNotification();
 
@@ -43,8 +42,10 @@ export default function AgentChatPage() {
   );
   const [runtimeAgentName, setRuntimeAgentName] = useState<string | null>(null);
   const [creatingThread, setCreatingThread] = useState(isNewThread);
+  const [settings, setSettings] = useThreadSettings(
+    resolvedThreadId ?? thread_id,
+  );
   const { agent, isLoading: agentLoading } = usePlatformAgent(agent_name);
-
   useEffect(() => {
     let cancelled = false;
     if (!isNewThread) {
