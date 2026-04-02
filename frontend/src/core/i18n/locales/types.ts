@@ -248,6 +248,20 @@ export interface Translations {
     memory: {
       title: string;
       description: string;
+      automaticTitle: string;
+      automaticDescription: string;
+      scopeTitle: string;
+      scopeDescription: string;
+      scopeCompanyBadge: string;
+      scopeCompanyLabel: string;
+      scopeAgentsLabel: string;
+      scopeRuntimeNote: string;
+      previewTitle: string;
+      previewDescription: string;
+      previewNoAgents: string;
+      previewEmpty: string;
+      sourceAgentsTitle: string;
+      factsAgentLabel: string;
       empty: string;
       rawJson: string;
       exportButton: string;

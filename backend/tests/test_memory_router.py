@@ -48,6 +48,34 @@ def test_export_memory_route_returns_current_memory() -> None:
     assert response.json()["facts"] == exported_memory["facts"]
 
 
+def test_get_memory_route_supports_agent_name_query() -> None:
+    app = FastAPI()
+    app.include_router(memory.router)
+    agent_memory = _sample_memory(
+        facts=[
+            {
+                "id": "fact_agent",
+                "content": "Company copywriter remembers the active campaign.",
+                "category": "context",
+                "confidence": 0.84,
+                "createdAt": "2026-03-20T00:00:00Z",
+                "source": "thread-company-copywriter",
+            }
+        ]
+    )
+
+    with patch(
+        "app.gateway.routers.memory.get_memory_data",
+        return_value=agent_memory,
+    ) as get_memory_data:
+        with TestClient(app) as client:
+            response = client.get("/api/memory", params={"agent_name": "company-a--copywriter"})
+
+    assert response.status_code == 200
+    get_memory_data.assert_called_once_with(agent_name="company-a--copywriter")
+    assert response.json()["facts"] == agent_memory["facts"]
+
+
 def test_import_memory_route_returns_imported_memory() -> None:
     app = FastAPI()
     app.include_router(memory.router)

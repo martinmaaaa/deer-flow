@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       category?: string;
       model?: string | null;
       tool_groups?: string[];
+      skills?: string[] | null;
       soul?: string;
     };
     if (!body.slug || !body.name) {
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       category: body.category ?? "通用",
       model: body.model ?? null,
       tool_groups: body.tool_groups ?? [],
+      skills: body.skills ?? null,
       soul: body.soul ?? "",
     });
     return NextResponse.json({ id }, { status: 201 });

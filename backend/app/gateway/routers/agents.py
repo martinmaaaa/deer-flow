@@ -24,6 +24,10 @@ class AgentResponse(BaseModel):
     description: str = Field(default="", description="Agent description")
     model: str | None = Field(default=None, description="Optional model override")
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
+    skills: list[str] | None = Field(
+        default=None,
+        description="Optional skill whitelist. Null inherits globally enabled skills; [] disables all skills.",
+    )
     soul: str | None = Field(default=None, description="SOUL.md content (included on GET /{name})")
 
 
@@ -40,6 +44,10 @@ class AgentCreateRequest(BaseModel):
     description: str = Field(default="", description="Agent description")
     model: str | None = Field(default=None, description="Optional model override")
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
+    skills: list[str] | None = Field(
+        default=None,
+        description="Optional skill whitelist. Null inherits globally enabled skills; [] disables all skills.",
+    )
     soul: str = Field(default="", description="SOUL.md content — agent personality and behavioral guardrails")
 
 
@@ -49,6 +57,10 @@ class AgentUpdateRequest(BaseModel):
     description: str | None = Field(default=None, description="Updated description")
     model: str | None = Field(default=None, description="Updated model override")
     tool_groups: list[str] | None = Field(default=None, description="Updated tool group whitelist")
+    skills: list[str] | None = Field(
+        default=None,
+        description="Updated skill whitelist. Null inherits globally enabled skills; [] disables all skills.",
+    )
     soul: str | None = Field(default=None, description="Updated SOUL.md content")
 
 
@@ -84,6 +96,7 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         description=agent_cfg.description,
         model=agent_cfg.model,
         tool_groups=agent_cfg.tool_groups,
+        skills=agent_cfg.skills,
         soul=soul,
     )
 
@@ -200,6 +213,8 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
             config_data["model"] = request.model
         if request.tool_groups is not None:
             config_data["tool_groups"] = request.tool_groups
+        if request.skills is not None:
+            config_data["skills"] = request.skills
 
         config_file = agent_dir / "config.yaml"
         with open(config_file, "w", encoding="utf-8") as f:
@@ -254,21 +269,35 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
     agent_dir = get_paths().agent_dir(name)
 
     try:
-        # Update config if any config fields changed
-        config_changed = any(v is not None for v in [request.description, request.model, request.tool_groups])
+        requested_fields = request.model_fields_set
+        config_fields = {"description", "model", "tool_groups", "skills"}
+        config_changed = bool(requested_fields & config_fields)
 
         if config_changed:
-            updated: dict = {
-                "name": agent_cfg.name,
-                "description": request.description if request.description is not None else agent_cfg.description,
-            }
-            new_model = request.model if request.model is not None else agent_cfg.model
+            updated: dict[str, object] = {"name": agent_cfg.name}
+
+            new_description = (
+                request.description
+                if "description" in requested_fields
+                else agent_cfg.description
+            )
+            updated["description"] = new_description or ""
+
+            new_model = request.model if "model" in requested_fields else agent_cfg.model
             if new_model is not None:
                 updated["model"] = new_model
 
-            new_tool_groups = request.tool_groups if request.tool_groups is not None else agent_cfg.tool_groups
+            new_tool_groups = (
+                request.tool_groups
+                if "tool_groups" in requested_fields
+                else agent_cfg.tool_groups
+            )
             if new_tool_groups is not None:
                 updated["tool_groups"] = new_tool_groups
+
+            new_skills = request.skills if "skills" in requested_fields else agent_cfg.skills
+            if new_skills is not None:
+                updated["skills"] = new_skills
 
             config_file = agent_dir / "config.yaml"
             with open(config_file, "w", encoding="utf-8") as f:

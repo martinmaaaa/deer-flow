@@ -313,7 +313,27 @@ export const enUS: Translations = {
     memory: {
       title: "Memory",
       description:
-        "DeerFlow automatically learns from your conversations in the background. These memories help DeerFlow understand you better and deliver a more personalized experience.",
+        "This page explains how automatic memory works for your company and shows a company-level preview.",
+      automaticTitle: "Automatic memory",
+      automaticDescription:
+        "DeerFlow keeps learning from your company's conversations in the background to improve future responses. What you see here is runtime memory, not a manually maintained company profile system.",
+      scopeTitle: "Current scope",
+      scopeDescription:
+        "The settings page aggregates automatic memory from the current company's view so members can understand what is being shared.",
+      scopeCompanyBadge: "Company-level preview",
+      scopeCompanyLabel: "Current company",
+      scopeAgentsLabel: "Agents included",
+      scopeRuntimeNote:
+        "Note: runtime memory is still stored per company and per agent. This page only aggregates those memories into a company-level view.",
+      previewTitle: "Company memory preview",
+      previewDescription:
+        "This preview combines summaries and facts from runtime agents that already exist for the current company.",
+      previewNoAgents:
+        "There are no generated runtime-agent memories available for this company yet.",
+      previewEmpty:
+        "This company already has memory scope available, but there is no automatic memory content to preview yet.",
+      sourceAgentsTitle: "Agents included in this preview",
+      factsAgentLabel: "Source agent",
       empty: "No memory data to display.",
       rawJson: "Raw JSON",
       exportButton: "Export memory",

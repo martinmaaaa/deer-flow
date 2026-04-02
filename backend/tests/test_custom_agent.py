@@ -484,12 +484,13 @@ class TestAgentsAPI:
         response = agent_client.delete("/api/agents/does-not-exist")
         assert response.status_code == 404
 
-    def test_create_agent_with_model_and_tool_groups(self, agent_client):
+    def test_create_agent_with_model_tool_groups_and_skills(self, agent_client):
         payload = {
             "name": "specialized",
             "description": "Specialized agent",
             "model": "deepseek-v3",
             "tool_groups": ["file:read", "bash"],
+            "skills": ["bootstrap", "skill-creator"],
             "soul": "You are specialized.",
         }
         response = agent_client.post("/api/agents", json=payload)
@@ -497,6 +498,21 @@ class TestAgentsAPI:
         data = response.json()
         assert data["model"] == "deepseek-v3"
         assert data["tool_groups"] == ["file:read", "bash"]
+        assert data["skills"] == ["bootstrap", "skill-creator"]
+
+    def test_update_agent_skills_can_revert_to_global_default(self, agent_client):
+        agent_client.post(
+            "/api/agents",
+            json={
+                "name": "skills-agent",
+                "skills": ["bootstrap"],
+                "soul": "hello",
+            },
+        )
+
+        response = agent_client.put("/api/agents/skills-agent", json={"skills": None})
+        assert response.status_code == 200
+        assert response.json()["skills"] is None
 
     def test_create_persists_files_on_disk(self, agent_client, tmp_path):
         agent_client.post("/api/agents", json={"name": "disk-check", "soul": "disk soul"})
