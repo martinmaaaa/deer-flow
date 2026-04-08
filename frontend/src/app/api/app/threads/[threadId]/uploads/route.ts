@@ -8,7 +8,7 @@ function gatewayBaseUrl() {
   return (
     env.DEER_FLOW_INTERNAL_GATEWAY_BASE_URL?.replace(/\/+$/, "") ??
     env.DEERFLOW_INTERNAL_GATEWAY_BASE_URL?.replace(/\/+$/, "") ??
-    "http://127.0.0.1:3026"
+    "http://127.0.0.1:2026"
   );
 }
 

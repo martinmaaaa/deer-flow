@@ -8,12 +8,22 @@ function gatewayBaseUrl() {
   return (
     env.DEER_FLOW_INTERNAL_GATEWAY_BASE_URL?.replace(/\/+$/, "") ??
     env.DEERFLOW_INTERNAL_GATEWAY_BASE_URL?.replace(/\/+$/, "") ??
-    "http://127.0.0.1:3026"
+    "http://127.0.0.1:2026"
   );
 }
 
 function buildProxyUrl(path: string, search: string) {
   return `${gatewayBaseUrl()}/api/${path}${search}`;
+}
+
+function rewriteContentLocation(contentLocation: string) {
+  if (contentLocation.startsWith("/api/")) {
+    return contentLocation.replace(/^\/api\//, "/api/app/langgraph/");
+  }
+  if (contentLocation.startsWith("/")) {
+    return `/api/app/langgraph${contentLocation}`;
+  }
+  return `/api/app/langgraph/${contentLocation}`;
 }
 
 async function handleProxy(
@@ -88,7 +98,7 @@ async function handleProxy(
   }
   const contentLocation = upstream.headers.get("content-location");
   if (contentLocation) {
-    headers.set("content-location", contentLocation.replace(/^\/api\//, "/api/app/langgraph/"));
+    headers.set("content-location", rewriteContentLocation(contentLocation));
   }
   const cacheControl = upstream.headers.get("cache-control");
   if (cacheControl) {
