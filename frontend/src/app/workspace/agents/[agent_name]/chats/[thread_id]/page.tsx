@@ -10,7 +10,11 @@ import { ArtifactTrigger } from "@/components/workspace/artifacts";
 import { ChatBox } from "@/components/workspace/chats";
 import { ExportTrigger } from "@/components/workspace/export-trigger";
 import { InputBox } from "@/components/workspace/input-box";
-import { MessageList } from "@/components/workspace/messages";
+import {
+  MessageList,
+  MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
+  MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM,
+} from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
@@ -28,6 +32,7 @@ import { cn } from "@/lib/utils";
 
 export default function AgentChatPage() {
   const { t } = useI18n();
+  const [showFollowups, setShowFollowups] = useState(false);
   const router = useRouter();
   const { showNotification } = useNotification();
 
@@ -46,6 +51,7 @@ export default function AgentChatPage() {
     resolvedThreadId ?? thread_id,
   );
   const { agent, isLoading: agentLoading } = usePlatformAgent(agent_name);
+
   useEffect(() => {
     let cancelled = false;
     if (!isNewThread) {
@@ -144,6 +150,11 @@ export default function AgentChatPage() {
     resolvedThreadId,
   ]);
 
+  const messageListPaddingBottom = showFollowups
+    ? MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
+      MESSAGE_LIST_FOLLOWUPS_EXTRA_PADDING_BOTTOM
+    : undefined;
+
   return (
     <ThreadContext.Provider value={{ thread }}>
       <ChatBox threadId={resolvedThreadId ?? "pending"}>
@@ -201,6 +212,7 @@ export default function AgentChatPage() {
                   className="size-full pt-10"
                   threadId={resolvedThreadId ?? "pending"}
                   thread={thread}
+                  paddingBottom={messageListPaddingBottom}
                 />
               )}
             </div>
@@ -240,6 +252,7 @@ export default function AgentChatPage() {
                   }
                   disabled={disabled}
                   onContextChange={(context) => setSettings("context", context)}
+                  onFollowupsVisibilityChange={setShowFollowups}
                   onSubmit={handleSubmit}
                   onStop={handleStop}
                 />

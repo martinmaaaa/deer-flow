@@ -148,14 +148,21 @@ init() {
 }
 
 # Start Docker development environment
+# Usage: start [--gateway]
 start() {
     local sandbox_mode
     local services
     local with_frontend=0
+    local gateway_mode=false
 
-    if [ "${2:-}" = "--with-frontend" ] || [ "${1:-}" = "--with-frontend" ]; then
-        with_frontend=1
-    fi
+    for arg in "$@"; do
+        if [ "$arg" = "--with-frontend" ]; then
+            with_frontend=1
+        fi
+        if [ "$arg" = "--gateway" ]; then
+            gateway_mode=true
+        fi
+    done
 
     echo "=========================================="
     echo "  Starting DeerFlow Docker Development"
@@ -164,26 +171,28 @@ start() {
 
     sandbox_mode="$(detect_sandbox_mode)"
 
-    if [ "$with_frontend" -eq 1 ]; then
-        export NGINX_CONF="${NGINX_CONF:-nginx.conf}"
+    if $gateway_mode; then
+        services="gateway postgres nginx"
+        if [ "$sandbox_mode" = "provisioner" ]; then
+            services="gateway postgres provisioner nginx"
+        fi
     else
-        export NGINX_CONF="${NGINX_CONF:-nginx.host-frontend.conf}"
-    fi
-
-    if [ "$sandbox_mode" = "provisioner" ]; then
-        if [ "$with_frontend" -eq 1 ]; then
-            services="frontend gateway langgraph postgres provisioner nginx"
-        else
+        services="gateway langgraph postgres nginx"
+        if [ "$sandbox_mode" = "provisioner" ]; then
             services="gateway langgraph postgres provisioner nginx"
         fi
-    else
-        if [ "$with_frontend" -eq 1 ]; then
-            services="frontend gateway langgraph postgres nginx"
-        else
-            services="gateway langgraph postgres nginx"
-        fi
     fi
 
+    if [ "$with_frontend" -eq 1 ]; then
+        services="frontend $services"
+        export NGINX_TEMPLATE="${NGINX_TEMPLATE:-nginx.conf}"
+    else
+        export NGINX_TEMPLATE="${NGINX_TEMPLATE:-nginx.host-frontend.conf}"
+    fi
+
+    if $gateway_mode; then
+        echo -e "${BLUE}Runtime: Gateway mode (experimental) — no LangGraph container${NC}"
+    fi
     echo -e "${BLUE}Detected sandbox mode: $sandbox_mode${NC}"
     if [ "$sandbox_mode" = "provisioner" ]; then
         echo -e "${BLUE}Provisioner enabled (Kubernetes mode).${NC}"
@@ -238,6 +247,12 @@ start() {
         fi
     fi
 
+    # Set nginx routing for gateway mode (envsubst in nginx container)
+    if $gateway_mode; then
+        export LANGGRAPH_UPSTREAM=gateway:8001
+        export LANGGRAPH_REWRITE=/api/
+    fi
+
     echo "Building and starting containers..."
     if [ "$with_frontend" -eq 0 ]; then
         cd "$DOCKER_DIR" && $COMPOSE_CMD stop frontend >/dev/null 2>&1 || true
@@ -249,14 +264,19 @@ start() {
     echo "=========================================="
     echo ""
     echo "  🌐 Application: http://localhost:3026"
+    echo "  📡 API Gateway: http://localhost:3026/api/*"
+    echo "  🗄️  Postgres:    localhost:55432"
     if [ "$with_frontend" -eq 0 ]; then
         echo "  💻 Frontend:    run 'make frontend-dev' on the host"
-        echo "  🗄️  Postgres:    localhost:55432"
     else
         echo "  💻 Frontend:    running in Docker"
     fi
-    echo "  📡 API Gateway: http://localhost:3026/api/*"
-    echo "  🤖 LangGraph:   http://localhost:3026/api/langgraph/*"
+    if $gateway_mode; then
+        echo "  🤖 Runtime:     Gateway embedded"
+        echo "  API:            /api/langgraph/* -> Gateway (compat)"
+    else
+        echo "  🤖 LangGraph:   http://localhost:3026/api/langgraph/*"
+    fi
     echo ""
     echo "  📋 View logs: make docker-logs"
     echo "  🛑 Stop:      make docker-stop"
@@ -344,10 +364,11 @@ help() {
     echo "Usage: $0 <command> [options]"
     echo ""
     echo "Commands:"
-    echo "  init          - Pull the sandbox image (speeds up first Pod startup)"
-    echo "  start         - Start backend Docker services; frontend runs on host by default"
-    echo "                  --with-frontend  Start the frontend in Docker too"
-    echo "  restart       - Restart all running Docker services"
+    echo "  init                - Pull the sandbox image (speeds up first Pod startup)"
+    echo "  start               - Start backend Docker services; frontend runs on host by default"
+    echo "  start --with-frontend - Start the frontend in Docker too"
+    echo "  start --gateway     - Start without LangGraph container (Gateway mode, experimental)"
+    echo "  restart             - Restart all running Docker services"
     echo "  logs [option] - View Docker development logs"
     echo "                  --frontend   View frontend logs only"
     echo "                  --gateway    View gateway logs only"
@@ -365,7 +386,8 @@ main() {
             init
             ;;
         start)
-            start
+            shift
+            start "$@"
             ;;
         restart)
             restart

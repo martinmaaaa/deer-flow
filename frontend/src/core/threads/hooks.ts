@@ -14,7 +14,7 @@ import type { FileInMessage } from "../messages/utils";
 import type { LocalSettings } from "../settings";
 import { useUpdateSubtask } from "../tasks/context";
 import type { UploadedFileInfo } from "../uploads";
-import { uploadFiles } from "../uploads";
+import { promptInputFilePartToFile, uploadFiles } from "../uploads";
 
 import type { AgentThread, AgentThreadState } from "./types";
 
@@ -31,6 +31,85 @@ export type ThreadStreamOptions = {
   onFinish?: (state: AgentThreadState) => void;
   onToolEnd?: (event: ToolEndEvent) => void;
 };
+
+type SendMessageOptions = {
+  additionalKwargs?: Record<string, unknown>;
+};
+
+function normalizeStoredRunId(runId: string | null): string | null {
+  if (!runId) {
+    return null;
+  }
+
+  const trimmed = runId.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const queryIndex = trimmed.indexOf("?");
+  if (queryIndex >= 0) {
+    const params = new URLSearchParams(trimmed.slice(queryIndex + 1));
+    const queryRunId = params.get("run_id")?.trim();
+    if (queryRunId) {
+      return queryRunId;
+    }
+  }
+
+  const pathWithoutQueryOrHash = trimmed.split(/[?#]/, 1)[0]?.trim() ?? "";
+  if (!pathWithoutQueryOrHash) {
+    return null;
+  }
+
+  const runsMarker = "/runs/";
+  const runsIndex = pathWithoutQueryOrHash.lastIndexOf(runsMarker);
+  if (runsIndex >= 0) {
+    const runIdAfterMarker = pathWithoutQueryOrHash
+      .slice(runsIndex + runsMarker.length)
+      .split("/", 1)[0]
+      ?.trim();
+    if (runIdAfterMarker) {
+      return runIdAfterMarker;
+    }
+    return null;
+  }
+
+  const segments = pathWithoutQueryOrHash
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments.at(-1) ?? null;
+}
+
+function getRunMetadataStorage(): {
+  getItem(key: `lg:stream:${string}`): string | null;
+  setItem(key: `lg:stream:${string}`, value: string): void;
+  removeItem(key: `lg:stream:${string}`): void;
+} {
+  return {
+    getItem(key) {
+      const normalized = normalizeStoredRunId(
+        window.sessionStorage.getItem(key),
+      );
+      if (normalized) {
+        window.sessionStorage.setItem(key, normalized);
+        return normalized;
+      }
+      window.sessionStorage.removeItem(key);
+      return null;
+    },
+    setItem(key, value) {
+      const normalized = normalizeStoredRunId(value);
+      if (normalized) {
+        window.sessionStorage.setItem(key, normalized);
+        return;
+      }
+      window.sessionStorage.removeItem(key);
+    },
+    removeItem(key) {
+      window.sessionStorage.removeItem(key);
+    },
+  };
+}
 
 function getStreamErrorMessage(error: unknown): string {
   if (typeof error === "string" && error.trim()) {
@@ -64,10 +143,7 @@ export function useThreadStream({
   onToolEnd,
 }: ThreadStreamOptions) {
   const { t } = useI18n();
-  // Track the thread ID that is currently streaming to handle thread changes during streaming
   const [onStreamThreadId, setOnStreamThreadId] = useState(() => threadId);
-  // Ref to track current thread ID across async callbacks without causing re-renders,
-  // and to allow access to the current thread id in onUpdateEvent
   const threadIdRef = useRef<string | null>(threadId ?? null);
   const startedRef = useRef(false);
 
@@ -77,7 +153,6 @@ export function useThreadStream({
     onToolEnd,
   });
 
-  // Keep listeners ref updated with latest callbacks
   useEffect(() => {
     listeners.current = { onStart, onFinish, onToolEnd };
   }, [onStart, onFinish, onToolEnd]);
@@ -85,7 +160,6 @@ export function useThreadStream({
   useEffect(() => {
     const normalizedThreadId = threadId ?? null;
     if (!normalizedThreadId) {
-      // Reset when entering new-thread mode so the next stream can create one.
       startedRef.current = false;
     }
     setOnStreamThreadId(normalizedThreadId);
@@ -109,12 +183,24 @@ export function useThreadStream({
 
   const queryClient = useQueryClient();
   const updateSubtask = useUpdateSubtask();
+  const runMetadataStorageRef = useRef<
+    ReturnType<typeof getRunMetadataStorage> | undefined
+  >(undefined);
+
+  if (
+    typeof window !== "undefined" &&
+    runMetadataStorageRef.current === undefined
+  ) {
+    runMetadataStorageRef.current = getRunMetadataStorage();
+  }
 
   const thread = useStream<AgentThreadState>({
     client: getAPIClient(isMock),
     assistantId: "lead_agent",
     threadId: onStreamThreadId,
-    reconnectOnMount: true,
+    reconnectOnMount: runMetadataStorageRef.current
+      ? () => runMetadataStorageRef.current!
+      : false,
     fetchStateHistory: { limit: 1 },
     onCreated(meta) {
       handleStreamStart(meta.thread_id);
@@ -214,14 +300,19 @@ export function useThreadStream({
     },
   });
 
-  // Optimistic messages shown before the server stream responds
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const sendInFlightRef = useRef(false);
-  // Track message count before sending so we know when server has responded
   const prevMsgCountRef = useRef(thread.messages.length);
 
-  // Clear optimistic when server messages arrive (count increases)
+  useEffect(() => {
+    startedRef.current = false;
+    sendInFlightRef.current = false;
+    prevMsgCountRef.current = 0;
+    setOptimisticMessages([]);
+    setIsUploading(false);
+  }, [threadId]);
+
   useEffect(() => {
     if (
       optimisticMessages.length > 0 &&
@@ -236,6 +327,7 @@ export function useThreadStream({
       threadId: string,
       message: PromptInputMessage,
       extraContext?: Record<string, unknown>,
+      options?: SendMessageOptions,
     ) => {
       if (sendInFlightRef.current) {
         return;
@@ -243,11 +335,8 @@ export function useThreadStream({
       sendInFlightRef.current = true;
 
       const text = message.text.trim();
-
-      // Capture current count before showing optimistic messages
       prevMsgCountRef.current = thread.messages.length;
 
-      // Build optimistic files list with uploading status
       const optimisticFiles: FileInMessage[] = (message.files ?? []).map(
         (f) => ({
           filename: f.filename ?? "",
@@ -256,18 +345,23 @@ export function useThreadStream({
         }),
       );
 
-      // Create optimistic human message (shown immediately)
-      const optimisticHumanMsg: Message = {
-        type: "human",
-        id: `opt-human-${Date.now()}`,
-        content: text ? [{ type: "text", text }] : "",
-        additional_kwargs:
-          optimisticFiles.length > 0 ? { files: optimisticFiles } : {},
+      const hideFromUI = options?.additionalKwargs?.hide_from_ui === true;
+      const optimisticAdditionalKwargs = {
+        ...options?.additionalKwargs,
+        ...(optimisticFiles.length > 0 ? { files: optimisticFiles } : {}),
       };
 
-      const newOptimistic: Message[] = [optimisticHumanMsg];
-      if (optimisticFiles.length > 0) {
-        // Mock AI message while files are being uploaded
+      const newOptimistic: Message[] = [];
+      if (!hideFromUI) {
+        newOptimistic.push({
+          type: "human",
+          id: `opt-human-${Date.now()}`,
+          content: text ? [{ type: "text", text }] : "",
+          additional_kwargs: optimisticAdditionalKwargs,
+        });
+      }
+
+      if (optimisticFiles.length > 0 && !hideFromUI) {
         newOptimistic.push({
           type: "ai",
           id: `opt-ai-${Date.now()}`,
@@ -277,37 +371,19 @@ export function useThreadStream({
       }
       setOptimisticMessages(newOptimistic);
 
-      _handleOnStart(threadId);
+      if (threadIdRef.current) {
+        _handleOnStart(threadId);
+      }
 
       let uploadedFileInfo: UploadedFileInfo[] = [];
 
       try {
-        // Upload files first if any
         if (message.files && message.files.length > 0) {
           setIsUploading(true);
           try {
-            // Convert FileUIPart to File objects by fetching blob URLs
-            const filePromises = message.files.map(async (fileUIPart) => {
-              if (fileUIPart.url && fileUIPart.filename) {
-                try {
-                  // Fetch the blob URL to get the file data
-                  const response = await fetch(fileUIPart.url);
-                  const blob = await response.blob();
-
-                  // Create a File object from the blob
-                  return new File([blob], fileUIPart.filename, {
-                    type: fileUIPart.mediaType || blob.type,
-                  });
-                } catch (error) {
-                  console.error(
-                    `Failed to fetch file ${fileUIPart.filename}:`,
-                    error,
-                  );
-                  return null;
-                }
-              }
-              return null;
-            });
+            const filePromises = message.files.map((fileUIPart) =>
+              promptInputFilePartToFile(fileUIPart),
+            );
 
             const conversionResults = await Promise.all(filePromises);
             const files = conversionResults.filter(
@@ -329,7 +405,6 @@ export function useThreadStream({
               const uploadResponse = await uploadFiles(threadId, files);
               uploadedFileInfo = uploadResponse.files;
 
-              // Update optimistic human message with uploaded status + paths
               const uploadedFiles: FileInMessage[] = uploadedFileInfo.map(
                 (info) => ({
                   filename: info.filename,
@@ -353,7 +428,6 @@ export function useThreadStream({
               });
             }
           } catch (error) {
-            console.error("Failed to upload files:", error);
             const errorMessage =
               error instanceof Error
                 ? error.message
@@ -366,7 +440,6 @@ export function useThreadStream({
           }
         }
 
-        // Build files metadata for submission (included in additional_kwargs)
         const filesForSubmit: FileInMessage[] = uploadedFileInfo.map(
           (info) => ({
             filename: info.filename,
@@ -387,8 +460,12 @@ export function useThreadStream({
                     text,
                   },
                 ],
-                additional_kwargs:
-                  filesForSubmit.length > 0 ? { files: filesForSubmit } : {},
+                additional_kwargs: {
+                  ...options?.additionalKwargs,
+                  ...(filesForSubmit.length > 0
+                    ? { files: filesForSubmit }
+                    : {}),
+                },
               },
             ],
           },
@@ -430,7 +507,6 @@ export function useThreadStream({
     [thread, _handleOnStart, t.uploads.uploadingFiles, context, queryClient],
   );
 
-  // Merge thread with optimistic messages for display
   const mergedThread =
     optimisticMessages.length > 0
       ? ({
